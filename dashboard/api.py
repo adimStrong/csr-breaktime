@@ -38,7 +38,7 @@ from dashboard.aggregations import (
     generate_daily_report,
     generate_weekly_report,
 )
-from database.db import get_connection, get_all_break_types
+from database.db import get_connection, get_all_break_types, init_database
 
 # ============================================
 # APP SETUP
@@ -64,6 +64,16 @@ app.add_middleware(
 # Mount static files
 if os.path.exists(STATIC_DIR):
     app.mount("/static", StaticFiles(directory=STATIC_DIR), name="static")
+
+
+@app.on_event("startup")
+async def startup_event():
+    """Initialize database on startup."""
+    try:
+        init_database()
+        print("Database initialized successfully")
+    except Exception as e:
+        print(f"Database initialization error: {e}")
 
 
 # ============================================
@@ -121,6 +131,16 @@ async def health_check():
         "records": count,
         "timestamp": datetime.now().isoformat()
     }
+
+
+@app.post("/api/init-db", tags=["Admin"])
+async def initialize_database():
+    """Manually initialize the database schema."""
+    try:
+        result = init_database()
+        return {"status": "ok", "message": "Database initialized successfully"}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
 
 
 # ============================================
