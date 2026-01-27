@@ -143,6 +143,53 @@ async def initialize_database():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+class ImportDataRequest(BaseModel):
+    """Request model for data import."""
+    sql_statements: List[str]
+    clear_existing: bool = False
+
+
+@app.post("/api/migrate-data", tags=["Admin"])
+async def migrate_data(request: ImportDataRequest):
+    """Import data from SQL statements - used for data migration."""
+    try:
+        with get_connection() as conn:
+            if request.clear_existing:
+                # Clear existing data (preserve schema)
+                tables = ['break_logs', 'active_sessions', 'daily_summaries',
+                         'hourly_metrics', 'audit_log', 'compliance_alerts',
+                         'team_daily_summaries', 'users']
+                for table in tables:
+                    try:
+                        conn.execute(f"DELETE FROM {table}")
+                    except:
+                        pass
+
+            executed = 0
+            errors = []
+            for stmt in request.sql_statements:
+                stmt = stmt.strip()
+                if not stmt or stmt.startswith('--'):
+                    continue
+                # Only allow INSERT statements for safety
+                if stmt.upper().startswith('INSERT'):
+                    try:
+                        conn.execute(stmt)
+                        executed += 1
+                    except Exception as e:
+                        errors.append(f"{str(e)[:50]}: {stmt[:50]}...")
+
+            conn.commit()
+
+        return {
+            "status": "ok",
+            "executed": executed,
+            "errors": errors[:10] if errors else []
+        }
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # REAL-TIME DASHBOARD
 # ============================================
