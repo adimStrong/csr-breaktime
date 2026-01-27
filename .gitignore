@@ -20,8 +20,12 @@ venv/
 *.swp
 *.swo
 
-# Database files
-database/
+# Database data files (keep Python code)
+database/*.db
+database/*.db-wal
+database/*.db-shm
+database/*.xlsx
+database/202*/
 
 # Logs
 *.log
