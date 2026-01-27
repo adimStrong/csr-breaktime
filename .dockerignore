@@ -1,0 +1,46 @@
+# Git
+.git
+.gitignore
+
+# Python
+__pycache__
+*.pyc
+*.pyo
+*.pyd
+.Python
+*.so
+.eggs
+*.egg-info
+.venv
+venv
+ENV
+
+# IDE
+.vscode
+.idea
+*.swp
+*.swo
+
+# Database files (data will be mounted as volume, but keep Python code)
+database/*.db
+database/*.db-wal
+database/*.db-shm
+database/*.xlsx
+database/202*
+
+# Environment (will use env_file)
+.env
+
+# Misc
+*.md
+*.log
+*.bak
+
+# Test files
+tests/
+test_*.py
+*_test.py
+
+# OS
+.DS_Store
+Thumbs.db

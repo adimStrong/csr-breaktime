@@ -1,0 +1,45 @@
+# CSR Breaktime Dashboard - Docker Compose
+# Dashboard reads from local database folder where the bot writes Excel files
+services:
+  dashboard:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: csr-breaktime-dashboard
+    restart: unless-stopped
+    ports:
+      - "8000:8000"
+    environment:
+      - TZ=Asia/Manila
+      - BASE_DIR=/app
+    volumes:
+      - ./database:/app/database
+    networks:
+      - csr-network
+
+  # Auto-sync service: watches Excel files and syncs to SQLite every 30 seconds
+  sync:
+    build:
+      context: .
+      dockerfile: dashboard/Dockerfile
+    container_name: csr-breaktime-sync
+    restart: unless-stopped
+    command: python database/sync.py --watch --interval 30
+    environment:
+      - TZ=Asia/Manila
+      - BASE_DIR=/app
+    volumes:
+      - ./database:/app/database
+    depends_on:
+      - dashboard
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+    networks:
+      - csr-network
+
+networks:
+  csr-network:
+    driver: bridge

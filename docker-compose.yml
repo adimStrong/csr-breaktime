@@ -1,0 +1,41 @@
+version: '3.8'
+
+services:
+  csr-breaktime-bot:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: csr_breaktime_bot
+
+    # Auto-restart unless manually stopped
+    restart: unless-stopped
+
+    # Environment variables from .env file
+    env_file:
+      - .env
+
+    # Set timezone
+    environment:
+      - TZ=Asia/Manila
+
+    # Volume mounting for database persistence
+    volumes:
+      - ./database:/app/database
+
+    # Logging with rotation
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "python", "-c", "import sys; sys.exit(0)"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 40s
+
+    # Network for Telegram API access
+    network_mode: bridge

@@ -1,0 +1,20 @@
+# Railway deployment configuration for CSR Breaktime
+
+[build]
+# Use the Railway-specific Dockerfile
+dockerfilePath = "Dockerfile.railway"
+
+[deploy]
+# Number of replicas (1 for SQLite, can't scale horizontally)
+numReplicas = 1
+
+# Health check endpoint
+healthcheckPath = "/health"
+healthcheckTimeout = 30
+
+# Restart policy
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Start command (optional, Dockerfile CMD takes precedence)
+# startCommand = "supervisord -c /etc/supervisor/conf.d/supervisord.conf"

@@ -1,0 +1,49 @@
+# Railway Dockerfile for CSR Breaktime Bot + Dashboard
+# Uses supervisord to run multiple processes in a single container
+
+FROM python:3.11-slim
+
+# Set environment variables
+ENV PYTHONDONTWRITEBYTECODE=1
+ENV PYTHONUNBUFFERED=1
+ENV TZ=Asia/Manila
+
+# Install system dependencies
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    supervisor \
+    curl \
+    tzdata \
+    && rm -rf /var/lib/apt/lists/* \
+    && ln -snf /usr/share/zoneinfo/$TZ /etc/localtime \
+    && echo $TZ > /etc/timezone
+
+# Set working directory
+WORKDIR /app
+
+# Copy requirements first (for better caching)
+COPY requirements.txt .
+
+# Install Python dependencies
+RUN pip install --no-cache-dir -r requirements.txt
+
+# Copy application code
+COPY . .
+
+# Create database directory (will be mounted as volume)
+RUN mkdir -p /app/database
+
+# Copy supervisord config
+COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
+
+# Set BASE_DIR environment variable
+ENV BASE_DIR=/app
+
+# Expose dashboard port
+EXPOSE 8000
+
+# Health check for Railway
+HEALTHCHECK --interval=30s --timeout=10s --start-period=30s --retries=3 \
+    CMD curl -f http://localhost:8000/health || exit 1
+
+# Start supervisord (manages bot + dashboard + sync)
+CMD ["/usr/bin/supervisord", "-c", "/etc/supervisor/conf.d/supervisord.conf"]
