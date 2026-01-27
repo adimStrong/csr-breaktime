@@ -27,13 +27,16 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Cache buster - change this value to force rebuild
-ARG CACHE_BUST=2
+ARG CACHE_BUST=3
 
 # Copy application code
 COPY . .
 
-# Create database directory (will be mounted as volume)
-RUN mkdir -p /app/database
+# Debug: verify database files exist (remove after debugging)
+RUN echo "=== Checking database files ===" && \
+    ls -la /app/database/ && \
+    cat /app/database/__init__.py && \
+    echo "=== Database files verified ==="
 
 # Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
