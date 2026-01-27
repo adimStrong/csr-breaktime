@@ -15,9 +15,11 @@ os.environ.setdefault('BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspat
 import pandas as pd
 from database.db import get_connection, get_or_create_user
 
-# Excel source directory (original bot's folder or local)
-EXCEL_SOURCE_DIR = os.environ.get('EXCEL_SOURCE_DIR', os.path.join(os.environ['BASE_DIR'], "database"))
-DATABASE_DIR = os.path.join(os.environ['BASE_DIR'], "database")
+# Import DATA_DIR from db module for consistent path handling
+from database.db import DATA_DIR
+
+# Excel source directory - use DATA_DIR for Railway volume
+EXCEL_SOURCE_DIR = os.environ.get('EXCEL_SOURCE_DIR', DATA_DIR)
 
 BREAK_TYPE_MAP = {
     '☕ Break': 1,

@@ -27,7 +27,7 @@ COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Cache buster - change this value to force rebuild
-ARG CACHE_BUST=5
+ARG CACHE_BUST=6
 RUN echo "Build version: $CACHE_BUST - $(date)"
 
 # Copy application code
@@ -45,6 +45,7 @@ COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 # Set environment variables for Python path and base directory
 ENV BASE_DIR=/app
 ENV PYTHONPATH=/app
+ENV DATA_DIR=/app/data
 
 # Expose dashboard port
 EXPOSE 8000

@@ -12,9 +12,11 @@ import json
 
 # Database configuration
 BASE_DIR = os.getenv('BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
-DATABASE_DIR = os.path.join(BASE_DIR, "database")
-DB_FILE = os.path.join(DATABASE_DIR, "breaktime.db")
-SCHEMA_FILE = os.path.join(DATABASE_DIR, "schema.sql")
+DATABASE_DIR = os.path.join(BASE_DIR, "database")  # Python module directory
+# Data directory - use /app/data on Railway (volume mount), fallback to database/ locally
+DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data") if os.path.exists(os.path.join(BASE_DIR, "data")) else DATABASE_DIR)
+DB_FILE = os.path.join(DATA_DIR, "breaktime.db")
+SCHEMA_FILE = os.path.join(DATABASE_DIR, "schema.sql")  # Schema stays in module directory
 
 # Register adapters and converters for Python 3.12+ compatibility
 def adapt_datetime(val):
@@ -61,7 +63,7 @@ def get_connection():
 
 def init_database():
     """Initialize the database with schema."""
-    os.makedirs(DATABASE_DIR, exist_ok=True)
+    os.makedirs(DATA_DIR, exist_ok=True)
 
     if not os.path.exists(SCHEMA_FILE):
         print(f"Schema file not found: {SCHEMA_FILE}")
