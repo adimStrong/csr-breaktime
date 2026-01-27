@@ -27,12 +27,16 @@ class ConnectionManager:
 
     async def connect(self, websocket: WebSocket):
         """Accept new WebSocket connection."""
-        await websocket.accept()
-        self.active_connections.add(websocket)
-        print(f"[WS] Client connected. Total: {len(self.active_connections)}")
+        try:
+            await websocket.accept()
+            self.active_connections.add(websocket)
+            print(f"[WS] Client connected. Total: {len(self.active_connections)}")
 
-        # Send initial data
-        await self.send_personal(websocket, await self.get_realtime_data())
+            # Send initial data
+            await self.send_personal(websocket, await self.get_realtime_data())
+        except Exception as e:
+            print(f"[WS] Connection accept error: {e}")
+            raise
 
     def disconnect(self, websocket: WebSocket):
         """Remove disconnected client."""

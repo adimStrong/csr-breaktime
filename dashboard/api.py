@@ -587,11 +587,27 @@ async def get_users(
 # ============================================
 
 from dashboard.websocket import manager, websocket_endpoint
+from fastapi import WebSocket, WebSocketDisconnect
+
+@app.get("/ws", include_in_schema=False)
+async def websocket_fallback():
+    """Fallback for non-WebSocket requests to /ws endpoint."""
+    return {"error": "WebSocket endpoint - use ws:// or wss:// protocol"}
 
 @app.websocket("/ws")
-async def websocket_route(websocket):
+async def websocket_route(websocket: WebSocket):
     """WebSocket endpoint for real-time updates."""
-    await websocket_endpoint(websocket)
+    # Log connection attempt details
+    client = websocket.client
+    headers = dict(websocket.headers) if hasattr(websocket, 'headers') else {}
+    print(f"[WS] Connection attempt from {client}, headers: {list(headers.keys())}")
+
+    try:
+        await websocket_endpoint(websocket)
+    except WebSocketDisconnect:
+        print("[WS] Client disconnected normally")
+    except Exception as e:
+        print(f"[WS] WebSocket error: {type(e).__name__}: {e}")
 
 def cleanup_stale_sessions(max_minutes: int = 120):
     """Remove active sessions older than max_minutes (default 2 hours)."""
