@@ -589,11 +589,6 @@ async def get_users(
 from dashboard.websocket import manager, websocket_endpoint
 from fastapi import WebSocket, WebSocketDisconnect
 
-@app.get("/ws", include_in_schema=False)
-async def websocket_fallback():
-    """Fallback for non-WebSocket requests to /ws endpoint."""
-    return {"error": "WebSocket endpoint - use ws:// or wss:// protocol"}
-
 @app.websocket("/ws")
 async def websocket_route(websocket: WebSocket):
     """WebSocket endpoint for real-time updates."""
