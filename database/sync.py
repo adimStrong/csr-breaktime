@@ -135,31 +135,45 @@ def detect_active_breaks_from_excel():
 
         # Update active_sessions table
         with get_connection() as conn:
-            # Only delete stale sessions, preserve recent bot entries
-            conn.execute("""
-                DELETE FROM active_sessions
-                WHERE start_time < datetime('now', '-2 minutes')
-                OR id IN (SELECT id FROM active_sessions WHERE user_id IN
-                    (SELECT user_id FROM active_sessions GROUP BY user_id HAVING COUNT(*) > 1))
+            # Get current bot sessions (created in last 5 minutes) to preserve them
+            cursor = conn.execute("""
+                SELECT user_id FROM active_sessions
+                WHERE created_at > datetime('now', '-5 minutes')
             """)
+            recent_bot_sessions = {row[0] for row in cursor.fetchall()}
 
-            # Insert current active sessions
+            # Get user IDs from Excel that have active sessions
+            excel_user_ids = set()
             for telegram_id, session in active_users.items():
-                # Get or create user
                 db_user_id = get_or_create_user(
                     telegram_id,
                     session['username'],
                     session['full_name']
                 )
+                excel_user_ids.add(db_user_id)
+
+                # Skip if this user has a recent bot session (preserve bot data)
+                if db_user_id in recent_bot_sessions:
+                    continue
 
                 # Get break type ID
                 bt_id = BREAK_TYPE_MAP.get(session['break_type'], 4)
 
-                # Insert active session
+                # Upsert active session from Excel
                 conn.execute("""
-                    INSERT INTO active_sessions (user_id, break_type_id, start_time, reason)
+                    INSERT OR REPLACE INTO active_sessions (user_id, break_type_id, start_time, reason)
                     VALUES (?, ?, ?, ?)
                 """, (db_user_id, bt_id, session['timestamp'], session['reason']))
+
+            # Only delete sessions that are:
+            # 1. Not from recent bot activity
+            # 2. Not in Excel active users
+            # 3. Older than 4 hours (truly stale)
+            conn.execute("""
+                DELETE FROM active_sessions
+                WHERE user_id NOT IN (SELECT user_id FROM active_sessions WHERE created_at > datetime('now', '-5 minutes'))
+                AND start_time < datetime('now', '-4 hours')
+            """)
 
         return len(active_users)
 
