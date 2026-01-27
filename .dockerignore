@@ -21,19 +21,8 @@ ENV
 *.swp
 *.swo
 
-# Database data files (exclude data, keep Python code)
-database/*.db
-database/*.db-wal
-database/*.db-shm
-database/*.xlsx
-database/202*/
-
-# Explicitly include database Python files (negate exclusions)
-!database/__init__.py
-!database/db.py
-!database/sync.py
-!database/migrate_excel.py
-!database/schema.sql
+# Database data files are not in git, so they won't be in build context
+# No need to exclude them here
 
 # Environment (will use env_file)
 .env
