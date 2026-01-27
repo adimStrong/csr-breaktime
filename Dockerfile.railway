@@ -26,6 +26,9 @@ COPY requirements.txt .
 # Install Python dependencies
 RUN pip install --no-cache-dir -r requirements.txt
 
+# Cache buster - change this value to force rebuild
+ARG CACHE_BUST=2
+
 # Copy application code
 COPY . .
 
