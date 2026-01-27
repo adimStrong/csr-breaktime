@@ -33,6 +33,9 @@ RUN echo "Build version: $CACHE_BUST - $(date)"
 # Copy application code
 COPY . .
 
+# Ensure data directory exists
+RUN mkdir -p /app/data
+
 # Debug: verify database files exist (remove after debugging)
 RUN echo "=== Checking database files ===" && \
     ls -la /app/database/ && \

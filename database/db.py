@@ -13,8 +13,9 @@ import json
 # Database configuration
 BASE_DIR = os.getenv('BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 DATABASE_DIR = os.path.join(BASE_DIR, "database")  # Python module directory
-# Data directory - use /app/data on Railway (volume mount), fallback to database/ locally
-DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, "data") if os.path.exists(os.path.join(BASE_DIR, "data")) else DATABASE_DIR)
+# Data directory - always use DATA_DIR env var or create data/ directory
+DATA_DIR = os.getenv('DATA_DIR', os.path.join(BASE_DIR, 'data'))
+os.makedirs(DATA_DIR, exist_ok=True)
 DB_FILE = os.path.join(DATA_DIR, "breaktime.db")
 SCHEMA_FILE = os.path.join(DATABASE_DIR, "schema.sql")  # Schema stays in module directory
 

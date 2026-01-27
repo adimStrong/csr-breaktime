@@ -135,8 +135,13 @@ def detect_active_breaks_from_excel():
 
         # Update active_sessions table
         with get_connection() as conn:
-            # Clear old active sessions
-            conn.execute("DELETE FROM active_sessions")
+            # Only delete stale sessions, preserve recent bot entries
+            conn.execute("""
+                DELETE FROM active_sessions
+                WHERE start_time < datetime('now', '-2 minutes')
+                OR id IN (SELECT id FROM active_sessions WHERE user_id IN
+                    (SELECT user_id FROM active_sessions GROUP BY user_id HAVING COUNT(*) > 1))
+            """)
 
             # Insert current active sessions
             for telegram_id, session in active_users.items():
@@ -206,6 +211,8 @@ def sync_all():
 def start_auto_sync(interval_seconds=30):
     """Start auto-sync loop."""
     import time
+    from database.db import init_database
+    init_database()  # Ensure DB exists before syncing
     print(f"Starting auto-sync (every {interval_seconds}s)...")
     print(f"Excel source: {EXCEL_SOURCE_DIR}")
 
