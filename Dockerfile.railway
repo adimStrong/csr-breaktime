@@ -35,8 +35,9 @@ RUN mkdir -p /app/database
 # Copy supervisord config
 COPY supervisord.conf /etc/supervisor/conf.d/supervisord.conf
 
-# Set BASE_DIR environment variable
+# Set environment variables for Python path and base directory
 ENV BASE_DIR=/app
+ENV PYTHONPATH=/app
 
 # Expose dashboard port
 EXPOSE 8000

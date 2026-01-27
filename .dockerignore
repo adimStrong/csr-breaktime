@@ -21,12 +21,19 @@ ENV
 *.swp
 *.swo
 
-# Database files (data will be mounted as volume, but keep Python code)
+# Database data files (exclude data, keep Python code)
 database/*.db
 database/*.db-wal
 database/*.db-shm
 database/*.xlsx
-database/202*
+database/202*/
+
+# Explicitly include database Python files (negate exclusions)
+!database/__init__.py
+!database/db.py
+!database/sync.py
+!database/migrate_excel.py
+!database/schema.sql
 
 # Environment (will use env_file)
 .env
