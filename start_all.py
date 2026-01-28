@@ -55,6 +55,43 @@ def run_auto_sync():
         print(f"[Sync] Failed to start: {e}")
 
 
+def initial_full_sync():
+    """One-time full sync of all historical Excel files to SQLite."""
+    print("[Startup] Running initial full sync of Excel data...")
+    try:
+        from database.db import init_database, get_connection
+        from database.sync import sync_excel_to_db
+        from pathlib import Path
+        from datetime import datetime, timedelta, timezone
+
+        # Initialize database
+        init_database()
+
+        # Get data directory
+        data_dir = os.getenv('DATA_DIR', os.path.join(os.environ['BASE_DIR'], 'data'))
+
+        # Find all Excel files
+        total_synced = 0
+        for month_dir in Path(data_dir).glob('202*-*'):
+            if month_dir.is_dir():
+                for excel_file in month_dir.glob('break_logs_*.xlsx'):
+                    try:
+                        new = sync_excel_to_db(excel_file)
+                        if new > 0:
+                            print(f"  Synced {new} records from {excel_file.name}")
+                            total_synced += new
+                    except Exception as e:
+                        print(f"  Error syncing {excel_file.name}: {e}")
+
+        print(f"[Startup] Initial sync complete: {total_synced} total records synced")
+        return total_synced
+    except Exception as e:
+        print(f"[Startup] Initial sync error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
+
+
 if __name__ == "__main__":
     mode = os.getenv("RUN_MODE", "both").lower()
 
@@ -70,6 +107,9 @@ if __name__ == "__main__":
         print("CSR Breaktime - Starting Bot + Dashboard + Sync")
         print("=" * 50)
         print()
+
+        # Initial full sync of historical data
+        initial_full_sync()
 
         # Start sync in background thread
         sync_thread = threading.Thread(target=run_auto_sync, daemon=True)

@@ -35,6 +35,9 @@ COPY dashboard/ ./dashboard/
 # Create data directories
 RUN mkdir -p /app/data /app/database
 
+# Copy seed data (Excel files) for initial sync
+COPY database/2026-01/ ./data/2026-01/
+
 # Expose dashboard port
 EXPOSE 8000
 
