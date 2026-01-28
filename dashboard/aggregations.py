@@ -5,10 +5,21 @@ Provides aggregated metrics, trend analysis, and report generation for the dashb
 
 import os
 import sys
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from typing import Dict, List, Optional, Tuple
 from dataclasses import dataclass, asdict
 from enum import Enum
+
+# Philippine Timezone (UTC+8)
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_ph_now():
+    """Get current datetime in Philippine timezone."""
+    return datetime.now(PH_TIMEZONE)
+
+def get_ph_date():
+    """Get current date in Philippine timezone."""
+    return get_ph_now().date()
 
 # Add parent directory to path
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -174,7 +185,7 @@ def get_realtime_dashboard_metrics() -> RealtimeMetrics:
             completed_breaks_today=completed,
             total_break_time_today=round(total_time, 1),
             compliance_rate=compliance_rate,
-            timestamp=datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            timestamp=get_ph_now().strftime('%Y-%m-%d %H:%M:%S')
         )
 
 
@@ -614,7 +625,7 @@ def get_compliance_summary(start_date: date, end_date: date) -> Dict:
 def generate_daily_report(report_date: date = None) -> Dict:
     """Generate a complete daily report."""
     if report_date is None:
-        report_date = date.today()
+        report_date = get_ph_date()
 
     with get_connection() as conn:
         # Team summary
@@ -700,7 +711,7 @@ def generate_daily_report(report_date: date = None) -> Dict:
 def generate_weekly_report(end_date: date = None) -> Dict:
     """Generate a weekly summary report."""
     if end_date is None:
-        end_date = date.today()
+        end_date = get_ph_date()
     start_date = end_date - timedelta(days=6)
 
     compliance_trend = get_compliance_trend(7)
@@ -749,7 +760,7 @@ def get_full_dashboard_data() -> Dict:
         'agent_performance': [asdict(a) for a in get_agent_performance_today()],
         'hourly_distribution': [asdict(h) for h in get_hourly_distribution_today()],
         'compliance_trend': [asdict(t) for t in get_compliance_trend(7)],
-        'generated_at': datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        'generated_at': get_ph_now().strftime('%Y-%m-%d %H:%M:%S')
     }
 
 

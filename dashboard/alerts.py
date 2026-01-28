@@ -6,9 +6,16 @@ Monitors breaks and sends alerts for violations.
 import os
 import sys
 import asyncio
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import List, Dict, Optional
 from dataclasses import dataclass, asdict
+
+# Philippine Timezone (UTC+8)
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_ph_now():
+    """Get current datetime in Philippine timezone."""
+    return datetime.now(PH_TIMEZONE)
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
@@ -87,7 +94,7 @@ class AlertManager:
                 duration_minutes=session['duration_minutes'],
                 over_limit_minutes=over_mins,
                 message=message,
-                timestamp=datetime.now().isoformat(),
+                timestamp=get_ph_now().isoformat(),
                 severity=severity
             )
             alerts.append(alert)
@@ -97,7 +104,7 @@ class AlertManager:
     def get_missing_clockbacks(self, for_date: str = None) -> List[Alert]:
         """Check for missing clock-back entries."""
         if for_date is None:
-            for_date = datetime.now().strftime('%Y-%m-%d')
+            for_date = get_ph_now().strftime('%Y-%m-%d')
 
         alerts = []
         with get_connection() as conn:
@@ -132,7 +139,7 @@ class AlertManager:
                     duration_minutes=0,
                     over_limit_minutes=0,
                     message=message,
-                    timestamp=datetime.now().isoformat(),
+                    timestamp=get_ph_now().isoformat(),
                     severity='warning'
                 )
                 alerts.append(alert)

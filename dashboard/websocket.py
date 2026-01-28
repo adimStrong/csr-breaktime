@@ -5,9 +5,16 @@ Real-time updates for dashboard clients.
 
 import asyncio
 import json
-from datetime import datetime
+from datetime import datetime, timedelta, timezone
 from typing import Set
 from dataclasses import asdict
+
+# Philippine Timezone (UTC+8)
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_ph_now():
+    """Get current datetime in Philippine timezone."""
+    return datetime.now(PH_TIMEZONE)
 
 from fastapi import WebSocket, WebSocketDisconnect
 
@@ -75,7 +82,7 @@ class ConnectionManager:
 
         return {
             "type": "realtime_update",
-            "timestamp": datetime.now().isoformat(),
+            "timestamp": get_ph_now().isoformat(),
             "data": {
                 "metrics": metrics.to_dict(),
                 "active_breaks": [asdict(b) for b in active],

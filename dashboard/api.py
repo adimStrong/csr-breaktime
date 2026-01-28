@@ -5,7 +5,18 @@ FastAPI backend serving dashboard data.
 
 import os
 import sys
-from datetime import date, datetime, timedelta
+from datetime import date, datetime, timedelta, timezone
+
+# Philippine Timezone (UTC+8)
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_ph_now():
+    """Get current datetime in Philippine timezone."""
+    return datetime.now(PH_TIMEZONE)
+
+def get_ph_date():
+    """Get current date in Philippine timezone."""
+    return get_ph_now().date()
 from typing import Optional, List
 from dataclasses import asdict
 
@@ -129,7 +140,7 @@ async def health_check():
         "status": "ok" if db_status == "ok" else "degraded",
         "database": db_status,
         "records": count,
-        "timestamp": datetime.now().isoformat()
+        "timestamp": get_ph_now().isoformat()
     }
 
 
@@ -254,7 +265,7 @@ async def get_distribution_today():
     try:
         dist = get_break_distribution_today()
         return {
-            "date": str(date.today()),
+            "date": str(get_ph_date()),
             "distribution": [asdict(d) for d in dist]
         }
     except Exception as e:
@@ -292,7 +303,7 @@ async def get_agents_performance():
     try:
         agents = get_agent_performance_today()
         return {
-            "date": str(date.today()),
+            "date": str(get_ph_date()),
             "count": len(agents),
             "agents": [asdict(a) for a in agents]
         }
@@ -327,7 +338,7 @@ async def get_hourly_today():
     try:
         hourly = get_hourly_distribution_today()
         return {
-            "date": str(date.today()),
+            "date": str(get_ph_date()),
             "hourly": [asdict(h) for h in hourly]
         }
     except Exception as e:
@@ -383,7 +394,7 @@ async def get_compliance_today():
         rate = round(100 * within / total, 1) if total > 0 else 100.0
 
         return {
-            "date": str(date.today()),
+            "date": str(get_ph_date()),
             "total_breaks": total,
             "within_limit": within,
             "over_limit": over,
@@ -438,7 +449,7 @@ async def get_daily_report(
         if report_date:
             dt = datetime.strptime(report_date, "%Y-%m-%d").date()
         else:
-            dt = date.today()
+            dt = get_ph_date()
         report = generate_daily_report(dt)
         return report
     except ValueError:
@@ -456,7 +467,7 @@ async def get_weekly_report(
         if end_date:
             dt = datetime.strptime(end_date, "%Y-%m-%d").date()
         else:
-            dt = date.today()
+            dt = get_ph_date()
         report = generate_weekly_report(dt)
         return report
     except ValueError:
@@ -731,7 +742,7 @@ async def export_report(
         if report_date:
             dt = datetime.strptime(report_date, "%Y-%m-%d").date()
         else:
-            dt = date.today()
+            dt = get_ph_date()
 
         if report_type == "weekly":
             report = generate_weekly_report(dt)

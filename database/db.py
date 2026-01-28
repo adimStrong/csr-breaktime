@@ -5,10 +5,21 @@ SQLite database wrapper with helper functions for bot and dashboard integration.
 
 import os
 import sqlite3
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from contextlib import contextmanager
 from typing import Optional, Dict, List, Any, Tuple
 import json
+
+# Philippine Timezone (UTC+8)
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_ph_now():
+    """Get current datetime in Philippine timezone."""
+    return datetime.now(PH_TIMEZONE)
+
+def get_ph_date():
+    """Get current date in Philippine timezone."""
+    return get_ph_now().date()
 
 # Database configuration
 BASE_DIR = os.getenv('BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -332,7 +343,7 @@ def get_break_distribution_today() -> List[Dict]:
 def get_hourly_distribution(log_date: date = None) -> List[Dict]:
     """Get hourly break distribution for peak time analysis."""
     if log_date is None:
-        log_date = date.today()
+        log_date = get_ph_date()
 
     with get_connection() as conn:
         cursor = conn.execute("""

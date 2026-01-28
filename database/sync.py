@@ -6,8 +6,19 @@ Also detects active breaks (OUT without BACK) for real-time dashboard.
 
 import os
 import sys
-from datetime import datetime, date, timedelta
+from datetime import datetime, date, timedelta, timezone
 from pathlib import Path
+
+# Philippine Timezone (UTC+8)
+PH_TIMEZONE = timezone(timedelta(hours=8))
+
+def get_ph_now():
+    """Get current datetime in Philippine timezone."""
+    return datetime.now(PH_TIMEZONE)
+
+def get_ph_date():
+    """Get current date in Philippine timezone."""
+    return get_ph_now().date()
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
@@ -101,7 +112,7 @@ def detect_active_breaks_from_excel():
     Detect active breaks by finding OUT entries without matching BACK entries.
     Updates the active_sessions table in real-time.
     """
-    today = date.today()
+    today = get_ph_date()
     year_month = today.strftime('%Y-%m')
     excel_file = Path(EXCEL_SOURCE_DIR) / year_month / f"break_logs_{today}.xlsx"
 
@@ -186,10 +197,10 @@ def detect_active_breaks_from_excel():
 
 def sync_all():
     """Sync all Excel files to database and detect active breaks."""
-    print(f"[{datetime.now()}] Starting sync from {EXCEL_SOURCE_DIR}...")
+    print(f"[{get_ph_now()}] Starting sync from {EXCEL_SOURCE_DIR}...")
 
     # Find today's and yesterday's Excel files
-    today = date.today()
+    today = get_ph_date()
     year_month = today.strftime('%Y-%m')
     month_dir = Path(EXCEL_SOURCE_DIR) / year_month
 
@@ -218,7 +229,7 @@ def sync_all():
     active_count = detect_active_breaks_from_excel()
     print(f"  Active breaks detected: {active_count}")
 
-    print(f"[{datetime.now()}] Sync complete. {total_new} new records.")
+    print(f"[{get_ph_now()}] Sync complete. {total_new} new records.")
     return total_new
 
 
