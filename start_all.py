@@ -55,6 +55,31 @@ def run_auto_sync():
         print(f"[Sync] Failed to start: {e}")
 
 
+def clear_stuck_active_breaks():
+    """Clear all stuck active breaks on startup."""
+    print("[Startup] Clearing stuck active breaks...")
+    try:
+        from database.db import get_connection
+
+        with get_connection() as conn:
+            # Count active sessions before clearing
+            cursor = conn.execute("SELECT COUNT(*) FROM active_sessions")
+            count = cursor.fetchone()[0]
+
+            if count > 0:
+                # Clear all active sessions
+                conn.execute("DELETE FROM active_sessions")
+                conn.commit()
+                print(f"[Startup] Cleared {count} stuck active breaks")
+            else:
+                print("[Startup] No stuck active breaks found")
+
+        return count
+    except Exception as e:
+        print(f"[Startup] Error clearing active breaks: {e}")
+        return 0
+
+
 def initial_full_sync():
     """One-time full sync of all historical Excel files to SQLite."""
     print("[Startup] Running initial full sync of Excel data...")
@@ -107,6 +132,9 @@ if __name__ == "__main__":
         print("CSR Breaktime - Starting Bot + Dashboard + Sync")
         print("=" * 50)
         print()
+
+        # Clear stuck active breaks first
+        clear_stuck_active_breaks()
 
         # Initial full sync of historical data
         initial_full_sync()
