@@ -94,25 +94,34 @@ def run_auto_sync():
 
 
 def clear_stuck_active_breaks():
-    """Clear all stuck active breaks on startup. Fail-safe - won't crash startup."""
-    print(f"[{get_timestamp()}] [Startup] Clearing stuck active breaks...")
+    """Clear only truly stuck active breaks (8+ hours old) on startup. Preserves recent sessions."""
+    print(f"[{get_timestamp()}] [Startup] Checking for stuck active breaks...")
     try:
         from database.db import get_connection
 
         with get_connection() as conn:
-            # Count active sessions before clearing
-            cursor = conn.execute("SELECT COUNT(*) FROM active_sessions")
-            count = cursor.fetchone()[0]
+            # Only delete sessions older than 8 hours (truly stuck/forgotten)
+            # This preserves recent sessions across restarts
+            cursor = conn.execute("""
+                SELECT COUNT(*) FROM active_sessions
+                WHERE start_time < datetime('now', '-8 hours')
+            """)
+            stale_count = cursor.fetchone()[0]
 
-            if count > 0:
-                # Clear all active sessions
-                conn.execute("DELETE FROM active_sessions")
+            if stale_count > 0:
+                conn.execute("DELETE FROM active_sessions WHERE start_time < datetime('now', '-8 hours')")
                 conn.commit()
-                print(f"[{get_timestamp()}] [Startup] Cleared {count} stuck active breaks")
-            else:
-                print(f"[{get_timestamp()}] [Startup] No stuck active breaks found")
+                print(f"[{get_timestamp()}] [Startup] Cleared {stale_count} stale breaks (8+ hours old)")
 
-        return count
+            # Count remaining active sessions
+            cursor = conn.execute("SELECT COUNT(*) FROM active_sessions")
+            remaining = cursor.fetchone()[0]
+            if remaining > 0:
+                print(f"[{get_timestamp()}] [Startup] Preserved {remaining} recent active sessions")
+            else:
+                print(f"[{get_timestamp()}] [Startup] No active sessions")
+
+        return stale_count
     except Exception as e:
         print(f"[{get_timestamp()}] [Startup] Error clearing active breaks (continuing anyway): {e}")
         return 0
