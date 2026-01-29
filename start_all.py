@@ -9,7 +9,7 @@ import subprocess
 import threading
 import time
 import pytz
-from datetime import datetime
+from datetime import datetime, timedelta
 
 os.environ['BASE_DIR'] = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.environ['BASE_DIR'])
@@ -91,6 +91,108 @@ def run_auto_sync():
             time.sleep(interval)
     except Exception as e:
         print(f"[Sync] Failed to start: {e}")
+
+
+def auto_close_orphaned_breaks():
+    """
+    Auto-close all OUT entries without BACK in Excel files.
+    Adds BACK entries with reason 'Auto-closed by system'.
+    """
+    print(f"[{get_timestamp()}] [Startup] Checking for orphaned breaks (OUT without BACK)...")
+    try:
+        import pandas as pd
+        from pathlib import Path
+
+        data_dir = os.getenv('DATA_DIR', os.path.join(os.environ['BASE_DIR'], 'database'))
+        close_time = datetime.now(PH_TZ)
+        close_timestamp = close_time.strftime('%Y-%m-%d %H:%M:%S')
+        total_closed = 0
+
+        # Check all recent Excel files (today and yesterday)
+        for days_back in range(2):  # Today and yesterday
+            check_date = close_time - timedelta(days=days_back)
+            year_month = check_date.strftime('%Y-%m')
+            date_str = check_date.strftime('%Y-%m-%d')
+            log_file = Path(data_dir) / year_month / f"break_logs_{date_str}.xlsx"
+
+            if not log_file.exists():
+                continue
+
+            try:
+                df = pd.read_excel(log_file, engine='openpyxl')
+                if df.empty:
+                    continue
+
+                # Find orphaned OUT entries (OUT without matching BACK)
+                orphaned = []
+                for user_id in df['User ID'].unique():
+                    user_df = df[df['User ID'] == user_id]
+
+                    for break_type in user_df['Break Type'].unique():
+                        type_df = user_df[user_df['Break Type'] == break_type]
+                        out_entries = type_df[type_df['Action'] == 'OUT']
+                        back_entries = type_df[type_df['Action'] == 'BACK']
+
+                        out_count = len(out_entries)
+                        back_count = len(back_entries)
+
+                        if out_count > back_count:
+                            # Get the last OUT entry that doesn't have a BACK
+                            last_out = out_entries.iloc[-1]
+                            orphaned.append({
+                                'user_id': last_out['User ID'],
+                                'username': last_out['Username'],
+                                'full_name': last_out['Full Name'],
+                                'break_type': break_type,
+                                'out_time': str(last_out['Timestamp'])
+                            })
+
+                if not orphaned:
+                    continue
+
+                # Add BACK entries for orphaned breaks
+                new_rows = []
+                for entry in orphaned:
+                    # Calculate duration
+                    try:
+                        out_time = datetime.strptime(entry['out_time'].split('.')[0], '%Y-%m-%d %H:%M:%S')
+                        duration_minutes = round((close_time.replace(tzinfo=None) - out_time).total_seconds() / 60, 1)
+                    except:
+                        duration_minutes = 0
+
+                    new_rows.append({
+                        'User ID': entry['user_id'],
+                        'Username': entry['username'],
+                        'Full Name': entry['full_name'],
+                        'Break Type': entry['break_type'],
+                        'Action': 'BACK',
+                        'Timestamp': close_timestamp,
+                        'Duration (minutes)': duration_minutes,
+                        'Reason': 'Auto-closed by system'
+                    })
+                    print(f"[{get_timestamp()}] [Auto-close] {entry['full_name']} - {entry['break_type']} (was out since {entry['out_time']})")
+
+                # Append new rows to Excel
+                if new_rows:
+                    new_df = pd.DataFrame(new_rows)
+                    df = pd.concat([df, new_df], ignore_index=True)
+                    df.to_excel(log_file, index=False, engine='openpyxl')
+                    total_closed += len(new_rows)
+
+            except Exception as e:
+                print(f"[{get_timestamp()}] [Auto-close] Error processing {log_file.name}: {e}")
+
+        if total_closed > 0:
+            print(f"[{get_timestamp()}] [Auto-close] Closed {total_closed} orphaned breaks")
+        else:
+            print(f"[{get_timestamp()}] [Auto-close] No orphaned breaks found")
+
+        return total_closed
+    except Exception as e:
+        print(f"[{get_timestamp()}] [Auto-close] Error: {e}")
+        import traceback
+        traceback.print_exc()
+        return 0
 
 
 def clear_stuck_active_breaks():
@@ -185,7 +287,10 @@ if __name__ == "__main__":
         print(f"[{get_timestamp()}] Mode: bot + dashboard + sync")
         print()
 
-        # Clear stuck active breaks first (fail-safe)
+        # Auto-close orphaned breaks (OUT without BACK) in Excel
+        auto_close_orphaned_breaks()
+
+        # Clear stuck active breaks from database (fail-safe)
         clear_stuck_active_breaks()
 
         # Initial full sync of historical data
