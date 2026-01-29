@@ -345,6 +345,92 @@ async def reset_and_resync():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/system/auto-close-orphans", tags=["System"])
+async def auto_close_orphaned_breaks():
+    """
+    Auto-close all OUT entries without BACK in Excel files.
+    Adds BACK entries with reason 'Auto-closed by system'.
+    """
+    try:
+        import pandas as pd
+        from pathlib import Path
+        from database.sync import EXCEL_SOURCE_DIR
+
+        close_time = get_ph_now()
+        close_timestamp = close_time.strftime('%Y-%m-%d %H:%M:%S')
+        results = {"closed": [], "total_closed": 0}
+
+        # Check today and yesterday
+        for days_back in range(2):
+            check_date = get_ph_date() - timedelta(days=days_back)
+            year_month = check_date.strftime('%Y-%m')
+            date_str = str(check_date)
+            log_file = Path(EXCEL_SOURCE_DIR) / year_month / f"break_logs_{date_str}.xlsx"
+
+            if not log_file.exists():
+                continue
+
+            df = pd.read_excel(log_file, engine='openpyxl')
+            if df.empty:
+                continue
+
+            # Find orphaned OUT entries
+            orphaned = []
+            for user_id in df['User ID'].unique():
+                user_df = df[df['User ID'] == user_id]
+                for break_type in user_df['Break Type'].unique():
+                    type_df = user_df[user_df['Break Type'] == break_type]
+                    out_count = len(type_df[type_df['Action'] == 'OUT'])
+                    back_count = len(type_df[type_df['Action'] == 'BACK'])
+
+                    if out_count > back_count:
+                        last_out = type_df[type_df['Action'] == 'OUT'].iloc[-1]
+                        orphaned.append({
+                            'user_id': last_out['User ID'],
+                            'username': last_out['Username'],
+                            'full_name': last_out['Full Name'],
+                            'break_type': break_type,
+                            'out_time': str(last_out['Timestamp'])
+                        })
+
+            if not orphaned:
+                continue
+
+            # Add BACK entries
+            new_rows = []
+            for entry in orphaned:
+                try:
+                    out_time = datetime.strptime(str(entry['out_time']).split('.')[0], '%Y-%m-%d %H:%M:%S')
+                    duration_minutes = round((close_time.replace(tzinfo=None) - out_time).total_seconds() / 60, 1)
+                except:
+                    duration_minutes = 0
+
+                new_rows.append({
+                    'User ID': entry['user_id'],
+                    'Username': entry['username'],
+                    'Full Name': entry['full_name'],
+                    'Break Type': entry['break_type'],
+                    'Action': 'BACK',
+                    'Timestamp': close_timestamp,
+                    'Duration (minutes)': duration_minutes,
+                    'Reason': 'Auto-closed by system'
+                })
+                results["closed"].append(f"{entry['full_name']} - {entry['break_type']}")
+
+            if new_rows:
+                new_df = pd.DataFrame(new_rows)
+                df = pd.concat([df, new_df], ignore_index=True)
+                df.to_excel(log_file, index=False, engine='openpyxl')
+                results["total_closed"] += len(new_rows)
+
+        return results
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # BREAK DISTRIBUTION
 # ============================================
