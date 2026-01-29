@@ -14,12 +14,20 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 # Import database sync functions for real-time dashboard
 try:
     from bot_db_integration import sync_break_out, sync_break_back
-    from database.db import get_active_session, get_or_create_user, get_all_active_sessions, get_user_by_telegram_id
     DB_SYNC_ENABLED = True
     print("✅ Database sync enabled for real-time dashboard")
 except ImportError:
     DB_SYNC_ENABLED = False
     print("⚠️ Database sync not available (bot_db_integration.py not found)")
+
+# Import additional DB functions for session persistence (separate try/except to not break main sync)
+DB_READ_ENABLED = False
+try:
+    from database.db import get_active_session, get_or_create_user, get_all_active_sessions, get_user_by_telegram_id
+    DB_READ_ENABLED = True
+    print("✅ Database read enabled for session persistence")
+except ImportError as e:
+    print(f"⚠️ Database read not available (sessions won't persist across restarts): {e}")
 
 # Import Microsoft Excel Online sync
 try:
@@ -71,7 +79,7 @@ def get_active_session_from_db(telegram_id: int) -> dict:
     Get active session from database and convert to in-memory format.
     This ensures sessions persist across bot restarts.
     """
-    if not DB_SYNC_ENABLED:
+    if not DB_READ_ENABLED:
         return None
 
     try:
@@ -105,7 +113,7 @@ def load_active_sessions_from_db():
     Load all active sessions from database into memory on startup.
     This restores state after bot restarts.
     """
-    if not DB_SYNC_ENABLED:
+    if not DB_READ_ENABLED:
         return
 
     try:
