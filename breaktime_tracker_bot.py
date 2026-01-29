@@ -321,8 +321,10 @@ You are trying to end a '{break_type}' break, but your active break is '{active_
         end_time = datetime.strptime(timestamp, '%Y-%m-%d %H:%M:%S')
         duration_minutes = round((end_time - start_time).total_seconds() / 60, 1)
 
-        log_break_activity(user_id, username, full_name, break_type, 'BACK', timestamp, duration_minutes, reason, group_chat_id=group_chat_id)
+        # Clear session FIRST to stop reminders immediately
         user_sessions[user_id] = {'active': False}
+
+        log_break_activity(user_id, username, full_name, break_type, 'BACK', timestamp, duration_minutes, reason, group_chat_id=group_chat_id)
 
         reason_text = f"\n📝 Reason: {reason}" if reason else ""
         await query.message.reply_text(
@@ -565,8 +567,10 @@ You are trying to end a '{break_type}' break, but your active break is '{active_
         reason = active_session.get('reason')
         session_group_chat_id = active_session.get('group_chat_id')
 
-        log_break_activity(user_id, username, full_name, break_type, 'BACK', timestamp, duration_minutes, reason, session_group_chat_id)
+        # Clear session FIRST to stop reminders immediately
         user_sessions[user_id] = {'active': False}
+
+        log_break_activity(user_id, username, full_name, break_type, 'BACK', timestamp, duration_minutes, reason, session_group_chat_id)
 
         reason_text = f"\n📝 Reason: {reason}" if reason else ""
         await update.message.reply_text(
