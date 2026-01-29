@@ -20,6 +20,16 @@ except ImportError:
     DB_SYNC_ENABLED = False
     print("⚠️ Database sync not available (bot_db_integration.py not found)")
 
+# Import Microsoft Excel Online sync
+try:
+    from microsoft.excel_handler import sync_break_to_excel, get_excel_handler
+    import asyncio
+    EXCEL_SYNC_AVAILABLE = True
+    print("✅ Excel Online sync module loaded")
+except ImportError as e:
+    EXCEL_SYNC_AVAILABLE = False
+    print(f"⚠️ Excel Online sync not available: {e}")
+
 # Bot Configuration
 BOT_TOKEN = os.getenv('BOT_TOKEN')
 if not BOT_TOKEN:
@@ -81,9 +91,9 @@ def init_database_structure():
         print(f"Using existing log file: {log_file}")
 
 
-def log_break_activity(user_id, username, full_name, break_type, action, timestamp, duration=None, reason=None, group_chat_id=None):
-    """Log break activity to daily Excel file AND SQLite database for real-time dashboard"""
-    # Log to Excel (original behavior)
+async def log_break_activity_async(user_id, username, full_name, break_type, action, timestamp, duration=None, reason=None, group_chat_id=None):
+    """Async version: Log break activity to Excel file, SQLite, AND Excel Online"""
+    # Log to local Excel file (original behavior)
     log_file = get_daily_log_file()
 
     if os.path.exists(log_file):
@@ -105,6 +115,54 @@ def log_break_activity(user_id, username, full_name, break_type, action, timesta
                 sync_break_back(user_id, username, full_name, break_type, timestamp, duration or 0, reason, group_chat_id)
         except Exception as e:
             print(f"[DB Sync Error] {e}")
+
+    # Sync to Excel Online (Microsoft OneDrive)
+    if EXCEL_SYNC_AVAILABLE:
+        try:
+            await sync_break_to_excel(
+                user_id, username, full_name, break_type,
+                action, timestamp, duration, reason
+            )
+        except Exception as e:
+            print(f"[Excel Online Sync Error] {e}")
+
+
+def log_break_activity(user_id, username, full_name, break_type, action, timestamp, duration=None, reason=None, group_chat_id=None):
+    """Log break activity to daily Excel file AND SQLite database for real-time dashboard"""
+    # Log to local Excel file (original behavior)
+    log_file = get_daily_log_file()
+
+    if os.path.exists(log_file):
+        df = pd.read_excel(log_file, engine='openpyxl')
+    else:
+        df = pd.DataFrame(columns=['User ID', 'Username', 'Full Name', 'Break Type', 'Action', 'Timestamp', 'Duration (minutes)', 'Reason'])
+
+    new_row = pd.DataFrame([[user_id, username, full_name, break_type, action, timestamp, duration or '', reason or '']],
+                          columns=['User ID', 'Username', 'Full Name', 'Break Type', 'Action', 'Timestamp', 'Duration (minutes)', 'Reason'])
+    df = pd.concat([df, new_row], ignore_index=True)
+    df.to_excel(log_file, index=False, engine='openpyxl')
+
+    # Sync to SQLite for real-time dashboard
+    if DB_SYNC_ENABLED:
+        try:
+            if action == 'OUT':
+                sync_break_out(user_id, username, full_name, break_type, timestamp, reason, group_chat_id)
+            elif action == 'BACK':
+                sync_break_back(user_id, username, full_name, break_type, timestamp, duration or 0, reason, group_chat_id)
+        except Exception as e:
+            print(f"[DB Sync Error] {e}")
+
+    # Schedule Excel Online sync (non-blocking)
+    if EXCEL_SYNC_AVAILABLE:
+        try:
+            loop = asyncio.get_event_loop()
+            if loop.is_running():
+                asyncio.create_task(sync_break_to_excel(
+                    user_id, username, full_name, break_type,
+                    action, timestamp, duration, reason
+                ))
+        except Exception as e:
+            print(f"[Excel Online Sync Error] {e}")
 
 
 async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
@@ -772,6 +830,23 @@ async def _send_individual_summaries(df: pd.DataFrame, context: ContextTypes.DEF
             print(f"Failed to send daily summary to {user_id}: {e}")
 
 
+async def init_excel_sync():
+    """Initialize Excel Online sync if configured."""
+    if EXCEL_SYNC_AVAILABLE:
+        try:
+            handler = get_excel_handler()
+            if handler.enabled:
+                success = await handler.initialize()
+                if success:
+                    print("✅ Excel Online sync initialized")
+                else:
+                    print("⚠️ Excel Online sync failed to initialize")
+            else:
+                print("ℹ️ Excel Online sync disabled (set EXCEL_SYNC_ENABLED=true)")
+        except Exception as e:
+            print(f"⚠️ Excel Online sync error: {e}")
+
+
 def main():
     """Start the bot"""
     print("\n" + "="*60)
@@ -780,6 +855,14 @@ def main():
     print("="*60)
 
     init_database_structure()
+
+    # Initialize Excel Online sync
+    if EXCEL_SYNC_AVAILABLE:
+        import asyncio
+        try:
+            asyncio.get_event_loop().run_until_complete(init_excel_sync())
+        except Exception as e:
+            print(f"⚠️ Excel sync init skipped: {e}")
 
     application = Application.builder().token(BOT_TOKEN).build()
 

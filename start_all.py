@@ -8,20 +8,30 @@ import sys
 import subprocess
 import threading
 import time
+import pytz
+from datetime import datetime
 
 os.environ['BASE_DIR'] = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, os.environ['BASE_DIR'])
 
+# Philippine Timezone
+PH_TZ = pytz.timezone('Asia/Manila')
+
+
+def get_timestamp():
+    """Get current timestamp in Philippine timezone for logging."""
+    return datetime.now(PH_TZ).strftime('%Y-%m-%d %H:%M:%S')
+
 
 def run_bot():
     """Run the Telegram bot."""
-    print("[Bot] Starting Telegram bot...")
+    print(f"[{get_timestamp()}] [Bot] Starting Telegram bot...")
     subprocess.run([sys.executable, "-u", "breaktime_tracker_bot.py"])
 
 
 def run_dashboard():
     """Run the dashboard server."""
-    print("[Dashboard] Starting dashboard server...")
+    print(f"[{get_timestamp()}] [Dashboard] Starting dashboard server...")
     import uvicorn
     uvicorn.run(
         "dashboard.api:app",
@@ -29,6 +39,34 @@ def run_dashboard():
         port=int(os.getenv("PORT", 8000)),
         reload=False
     )
+
+
+def run_health_check():
+    """Periodically log health status. Runs in a background thread."""
+    HEALTH_CHECK_INTERVAL = 300  # 5 minutes
+
+    while True:
+        try:
+            time.sleep(HEALTH_CHECK_INTERVAL)
+
+            # Count today's breaks from database
+            break_count = 0
+            try:
+                from database.db import get_connection
+                with get_connection() as conn:
+                    today = datetime.now(PH_TZ).strftime('%Y-%m-%d')
+                    cursor = conn.execute(
+                        "SELECT COUNT(*) FROM break_logs WHERE date(timestamp) = ?",
+                        (today,)
+                    )
+                    break_count = cursor.fetchone()[0]
+            except Exception:
+                pass
+
+            print(f"[{get_timestamp()}] [HEALTH] Heartbeat - System OK | Breaks logged today: {break_count}")
+
+        except Exception as e:
+            print(f"[{get_timestamp()}] [HEALTH] Health check error: {e}")
 
 
 def run_auto_sync():
@@ -56,8 +94,8 @@ def run_auto_sync():
 
 
 def clear_stuck_active_breaks():
-    """Clear all stuck active breaks on startup."""
-    print("[Startup] Clearing stuck active breaks...")
+    """Clear all stuck active breaks on startup. Fail-safe - won't crash startup."""
+    print(f"[{get_timestamp()}] [Startup] Clearing stuck active breaks...")
     try:
         from database.db import get_connection
 
@@ -70,13 +108,13 @@ def clear_stuck_active_breaks():
                 # Clear all active sessions
                 conn.execute("DELETE FROM active_sessions")
                 conn.commit()
-                print(f"[Startup] Cleared {count} stuck active breaks")
+                print(f"[{get_timestamp()}] [Startup] Cleared {count} stuck active breaks")
             else:
-                print("[Startup] No stuck active breaks found")
+                print(f"[{get_timestamp()}] [Startup] No stuck active breaks found")
 
         return count
     except Exception as e:
-        print(f"[Startup] Error clearing active breaks: {e}")
+        print(f"[{get_timestamp()}] [Startup] Error clearing active breaks (continuing anyway): {e}")
         return 0
 
 
@@ -118,26 +156,36 @@ def initial_full_sync():
 
 
 if __name__ == "__main__":
+    print(f"[{get_timestamp()}] " + "=" * 50)
+    print(f"[{get_timestamp()}] CSR Breaktime - Startup")
+    print(f"[{get_timestamp()}] " + "=" * 50)
+
     mode = os.getenv("RUN_MODE", "both").lower()
 
     if mode == "bot":
+        print(f"[{get_timestamp()}] Mode: bot only")
         run_bot()
     elif mode == "dashboard":
+        print(f"[{get_timestamp()}] Mode: dashboard only")
         run_dashboard()
     elif mode == "sync":
+        print(f"[{get_timestamp()}] Mode: sync only")
         run_auto_sync()
     else:
         # Run all services together
-        print("=" * 50)
-        print("CSR Breaktime - Starting Bot + Dashboard + Sync")
-        print("=" * 50)
+        print(f"[{get_timestamp()}] Mode: bot + dashboard + sync")
         print()
 
-        # Clear stuck active breaks first
+        # Clear stuck active breaks first (fail-safe)
         clear_stuck_active_breaks()
 
         # Initial full sync of historical data
         initial_full_sync()
+
+        # Start health check in background thread
+        health_thread = threading.Thread(target=run_health_check, daemon=True)
+        health_thread.start()
+        print(f"[{get_timestamp()}] [HEALTH] Health check started (every 5 minutes)")
 
         # Start sync in background thread
         sync_thread = threading.Thread(target=run_auto_sync, daemon=True)

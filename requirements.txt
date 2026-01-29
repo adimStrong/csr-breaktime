@@ -8,3 +8,7 @@ python-multipart>=0.0.6
 pydantic>=2.5.3
 websockets>=12.0
 PyJWT>=2.8.0
+# Microsoft Excel Online sync
+msal>=1.24.0
+aiohttp>=3.9.0
+requests>=2.31.0
