@@ -116,6 +116,33 @@ def init_database():
         except Exception as e:
             print(f"Migration check: {e}")
 
+        # Add unique constraint on break_logs to prevent duplicates (migration)
+        try:
+            # Check if unique index exists
+            cursor = conn.execute("SELECT name FROM sqlite_master WHERE type='index' AND name='idx_break_logs_unique'")
+            if not cursor.fetchone():
+                # First, remove any existing duplicates (keep lowest rowid)
+                cursor = conn.execute("""
+                    DELETE FROM break_logs
+                    WHERE rowid NOT IN (
+                        SELECT MIN(rowid)
+                        FROM break_logs
+                        GROUP BY user_id, timestamp, action
+                    )
+                """)
+                deleted = cursor.rowcount
+                if deleted > 0:
+                    print(f"Removed {deleted} duplicate break_logs entries")
+
+                # Create unique index to prevent future duplicates
+                conn.execute("""
+                    CREATE UNIQUE INDEX IF NOT EXISTS idx_break_logs_unique
+                    ON break_logs(user_id, timestamp, action)
+                """)
+                print("Added unique constraint to break_logs table")
+        except Exception as e:
+            print(f"Break logs migration: {e}")
+
         print(f"Database initialized: {DB_FILE}")
 
     return True

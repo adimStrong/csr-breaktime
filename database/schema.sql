@@ -55,7 +55,8 @@ CREATE TABLE IF NOT EXISTS break_logs (
     log_date DATE NOT NULL,           -- Extracted for efficient date queries
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
-    FOREIGN KEY (break_type_id) REFERENCES break_types(id)
+    FOREIGN KEY (break_type_id) REFERENCES break_types(id),
+    UNIQUE(user_id, timestamp, action)  -- Prevent duplicate entries
 );
 
 CREATE INDEX IF NOT EXISTS idx_break_logs_user_id ON break_logs(user_id);

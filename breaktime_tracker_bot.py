@@ -708,8 +708,31 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
     return ConversationHandler.END
 
 
+def check_and_clear_cache_signal():
+    """Check for cache clear signal from API and clear user_sessions if needed."""
+    global user_sessions
+    signal_file = os.path.join(DATABASE_DIR, ".clear_cache_signal")
+
+    if os.path.exists(signal_file):
+        try:
+            # Read signal timestamp
+            with open(signal_file, 'r') as f:
+                signal_time = f.read().strip()
+            # Delete signal file
+            os.remove(signal_file)
+            # Clear all user sessions
+            user_sessions.clear()
+            print(f"🔄 Cache cleared by system signal at {signal_time}")
+            print(f"   All {len(user_sessions)} user sessions cleared")
+        except Exception as e:
+            print(f"⚠️ Error processing cache clear signal: {e}")
+
+
 async def check_break_reminders(context: ContextTypes.DEFAULT_TYPE):
     """Periodically check for long-running breaks and send reminders to group EVERY MINUTE."""
+    # Check for cache clear signal from API
+    check_and_clear_cache_signal()
+
     now = get_ph_time()
     now_naive = datetime.strptime(now.strftime('%Y-%m-%d %H:%M:%S'), '%Y-%m-%d %H:%M:%S')
 

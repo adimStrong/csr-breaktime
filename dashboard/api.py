@@ -281,6 +281,70 @@ async def force_close_all_breaks():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.post("/api/system/reset-and-resync", tags=["System"])
+async def reset_and_resync():
+    """
+    Full system reset: Clear all caches, close active breaks, and resync from Excel.
+    This removes duplicates and restarts fresh.
+    """
+    try:
+        from database.sync import sync_excel_to_db, EXCEL_SOURCE_DIR
+        from pathlib import Path
+
+        results = {
+            "active_sessions_cleared": 0,
+            "today_logs_cleared": 0,
+            "duplicates_removed": 0,
+            "records_resynced": 0,
+            "status": "success"
+        }
+
+        today = get_ph_date()
+        today_str = str(today)
+
+        with get_connection() as conn:
+            # 1. Clear all active sessions
+            cursor = conn.execute("DELETE FROM active_sessions")
+            results["active_sessions_cleared"] = cursor.rowcount
+
+            # 2. Remove duplicates from break_logs (keep only the first entry per user/timestamp/action)
+            cursor = conn.execute("""
+                DELETE FROM break_logs
+                WHERE rowid NOT IN (
+                    SELECT MIN(rowid)
+                    FROM break_logs
+                    GROUP BY user_id, timestamp, action
+                )
+            """)
+            results["duplicates_removed"] = cursor.rowcount
+
+            # 3. Delete today's logs to resync fresh from Excel
+            cursor = conn.execute("DELETE FROM break_logs WHERE log_date = ?", (today_str,))
+            results["today_logs_cleared"] = cursor.rowcount
+
+            conn.commit()
+
+        # 4. Resync from Excel
+        year_month = today.strftime('%Y-%m')
+        excel_file = Path(EXCEL_SOURCE_DIR) / year_month / f"break_logs_{today}.xlsx"
+
+        if excel_file.exists():
+            # Force resync by temporarily resetting last_sync
+            new_records = sync_excel_to_db(excel_file)
+            results["records_resynced"] = new_records
+
+        # 5. Signal bot to clear its memory cache (write a signal file)
+        signal_file = Path(EXCEL_SOURCE_DIR) / ".clear_cache_signal"
+        signal_file.write_text(str(get_ph_now()))
+
+        return results
+
+    except Exception as e:
+        import traceback
+        traceback.print_exc()
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # BREAK DISTRIBUTION
 # ============================================
