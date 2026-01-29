@@ -255,6 +255,32 @@ async def get_overdue_breaks():
         raise HTTPException(status_code=500, detail=str(e))
 
 
+@app.delete("/api/breaks/force-close/{user_id}", tags=["Breaks"])
+async def force_close_break(user_id: int):
+    """Force close an active break session for a user."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute("DELETE FROM active_sessions WHERE user_id = ?", (user_id,))
+            deleted = cursor.rowcount
+            conn.commit()
+        return {"status": "ok", "deleted": deleted, "user_id": user_id}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
+@app.delete("/api/breaks/force-close-all", tags=["Breaks"])
+async def force_close_all_breaks():
+    """Force close all active break sessions."""
+    try:
+        with get_connection() as conn:
+            cursor = conn.execute("DELETE FROM active_sessions")
+            deleted = cursor.rowcount
+            conn.commit()
+        return {"status": "ok", "deleted": deleted}
+    except Exception as e:
+        raise HTTPException(status_code=500, detail=str(e))
+
+
 # ============================================
 # BREAK DISTRIBUTION
 # ============================================
