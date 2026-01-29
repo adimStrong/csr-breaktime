@@ -203,10 +203,17 @@ def detect_active_breaks_from_excel():
                 # Get break type ID
                 bt_id = BREAK_TYPE_MAP.get(session['break_type'], 4)
 
-                # Upsert active session from Excel
+                # Only insert/update if no bot session exists for this user
+                # Use source='excel' to track that this came from Excel sync
                 conn.execute("""
-                    INSERT OR REPLACE INTO active_sessions (user_id, break_type_id, start_time, reason)
-                    VALUES (?, ?, ?, ?)
+                    INSERT INTO active_sessions (user_id, break_type_id, start_time, reason, source)
+                    VALUES (?, ?, ?, ?, 'excel')
+                    ON CONFLICT(user_id) DO UPDATE SET
+                        break_type_id = excluded.break_type_id,
+                        start_time = excluded.start_time,
+                        reason = excluded.reason,
+                        source = 'excel'
+                    WHERE source = 'excel'  -- Only update if existing session is from Excel, never overwrite bot sessions
                 """, (db_user_id, bt_id, session['timestamp'], session['reason']))
 
             # Only delete truly stale sessions:

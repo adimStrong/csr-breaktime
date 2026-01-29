@@ -55,14 +55,33 @@ sqlite3.register_converter("DATE", convert_date)
 
 
 @contextmanager
-def get_connection():
+def get_connection(timeout: int = 30):
     """Context manager for database connections."""
-    conn = sqlite3.connect(DB_FILE, detect_types=sqlite3.PARSE_DECLTYPES, timeout=30)
+    conn = sqlite3.connect(DB_FILE, detect_types=sqlite3.PARSE_DECLTYPES, timeout=timeout)
     conn.row_factory = sqlite3.Row
     conn.execute("PRAGMA foreign_keys = ON")
     conn.execute("PRAGMA journal_mode = WAL")  # Enable concurrent access
-    conn.execute("PRAGMA busy_timeout = 30000")  # Wait up to 30s if database is locked
+    conn.execute(f"PRAGMA busy_timeout = {timeout * 1000}")  # Convert to milliseconds
     conn.execute("PRAGMA synchronous = NORMAL")  # Balance between safety and speed
+    try:
+        yield conn
+        conn.commit()
+    except Exception as e:
+        conn.rollback()
+        raise e
+    finally:
+        conn.close()
+
+
+@contextmanager
+def get_fast_connection():
+    """Fast connection for dashboard queries with shorter timeout (5 seconds)."""
+    conn = sqlite3.connect(DB_FILE, detect_types=sqlite3.PARSE_DECLTYPES, timeout=5)
+    conn.row_factory = sqlite3.Row
+    conn.execute("PRAGMA foreign_keys = ON")
+    conn.execute("PRAGMA journal_mode = WAL")
+    conn.execute("PRAGMA busy_timeout = 5000")  # 5 second timeout
+    conn.execute("PRAGMA synchronous = NORMAL")
     try:
         yield conn
         conn.commit()
@@ -86,6 +105,17 @@ def init_database():
 
     with get_connection() as conn:
         conn.executescript(schema_sql)
+
+        # Add source column to active_sessions if it doesn't exist (migration)
+        try:
+            cursor = conn.execute("PRAGMA table_info(active_sessions)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if 'source' not in columns:
+                conn.execute("ALTER TABLE active_sessions ADD COLUMN source TEXT DEFAULT 'bot'")
+                print("Added 'source' column to active_sessions table")
+        except Exception as e:
+            print(f"Migration check: {e}")
+
         print(f"Database initialized: {DB_FILE}")
 
     return True
@@ -201,16 +231,16 @@ def get_user_breaks_for_date(user_id: int, log_date: date) -> List[Dict]:
 # ============================================
 
 def start_session(user_id: int, break_type_id: int, start_time: datetime,
-                  reason: str = None, group_chat_id: int = None) -> int:
-    """Start a new break session. Returns session ID."""
+                  reason: str = None, group_chat_id: int = None, source: str = 'bot') -> int:
+    """Start a new break session. Returns session ID. Source tracks origin (bot/excel)."""
     with get_connection() as conn:
         # Remove any existing session for this user
         conn.execute("DELETE FROM active_sessions WHERE user_id = ?", (user_id,))
 
         cursor = conn.execute("""
-            INSERT INTO active_sessions (user_id, break_type_id, start_time, reason, group_chat_id)
-            VALUES (?, ?, ?, ?, ?)
-        """, (user_id, break_type_id, start_time, reason, group_chat_id))
+            INSERT INTO active_sessions (user_id, break_type_id, start_time, reason, group_chat_id, source)
+            VALUES (?, ?, ?, ?, ?, ?)
+        """, (user_id, break_type_id, start_time, reason, group_chat_id, source))
         return cursor.lastrowid
 
 

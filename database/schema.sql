@@ -74,10 +74,14 @@ CREATE TABLE IF NOT EXISTS active_sessions (
     group_chat_id INTEGER,
     reminder_sent BOOLEAN DEFAULT 0,
     last_reminder_at TIMESTAMP,
+    source TEXT DEFAULT 'bot' CHECK (source IN ('bot', 'excel')),  -- Track data source
     created_at TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
     FOREIGN KEY (user_id) REFERENCES users(id),
     FOREIGN KEY (break_type_id) REFERENCES break_types(id)
 );
+
+-- Add source column if not exists (for existing databases)
+-- SQLite doesn't support IF NOT EXISTS for ALTER TABLE, so we handle this in code
 
 CREATE INDEX IF NOT EXISTS idx_active_sessions_user_id ON active_sessions(user_id);
 
