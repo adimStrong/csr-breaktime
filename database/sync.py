@@ -24,7 +24,30 @@ sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 os.environ.setdefault('BASE_DIR', os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 
 import pandas as pd
+import time
 from database.db import get_connection, get_or_create_user
+
+
+def safe_read_excel(file_path: Path, max_retries: int = 3, retry_delay: float = 1.0):
+    """
+    Safely read Excel file with retry logic for file lock situations.
+    Returns DataFrame or None if file cannot be read.
+    """
+    for attempt in range(max_retries):
+        try:
+            df = pd.read_excel(file_path, engine='openpyxl')
+            return df
+        except PermissionError:
+            if attempt < max_retries - 1:
+                print(f"[Sync] File locked, retrying in {retry_delay}s... ({attempt + 1}/{max_retries})")
+                time.sleep(retry_delay)
+            else:
+                print(f"[Sync] Could not read {file_path} - file locked")
+                return None
+        except Exception as e:
+            print(f"[Sync] Error reading {file_path}: {e}")
+            return None
+    return None
 
 # Import DATA_DIR from db module for consistent path handling
 from database.db import DATA_DIR
@@ -51,8 +74,8 @@ def get_last_synced_timestamp():
 def sync_excel_to_db(excel_file: Path) -> int:
     """Sync a single Excel file to the database. Returns count of new records."""
     try:
-        df = pd.read_excel(excel_file, engine='openpyxl')
-        if df.empty:
+        df = safe_read_excel(excel_file)
+        if df is None or df.empty:
             return 0
 
         date_str = excel_file.stem.replace('break_logs_', '')
@@ -63,40 +86,50 @@ def sync_excel_to_db(excel_file: Path) -> int:
             last_sync = last_sync.strftime('%Y-%m-%d %H:%M:%S')
 
         new_records = 0
+        skipped_records = 0
 
         with get_connection() as conn:
-            for _, row in df.iterrows():
-                ts = str(row['Timestamp']).split('.')[0]
+            for idx, row in df.iterrows():
+                try:
+                    ts = str(row['Timestamp']).split('.')[0]
 
-                # Skip if already synced
-                if ts <= str(last_sync):
-                    continue
+                    # Skip if already synced
+                    if ts <= str(last_sync):
+                        continue
 
-                # Get or create user
-                tid = int(row['User ID'])
-                username = str(row['Username']) if pd.notna(row['Username']) else None
-                full_name = str(row['Full Name']) if pd.notna(row['Full Name']) else 'Unknown'
-                user_id = get_or_create_user(tid, username, full_name)
+                    # Get or create user
+                    tid = int(row['User ID'])
+                    username = str(row['Username']) if pd.notna(row['Username']) else None
+                    full_name = str(row['Full Name']) if pd.notna(row['Full Name']) else 'Unknown'
+                    user_id = get_or_create_user(tid, username, full_name)
 
-                # Get break type
-                bt_id = BREAK_TYPE_MAP.get(str(row['Break Type']), 4)
+                    # Get break type
+                    bt_id = BREAK_TYPE_MAP.get(str(row['Break Type']), 4)
 
-                # Get other fields
-                action = str(row['Action']).upper()
-                duration = None
-                if pd.notna(row['Duration (minutes)']) and row['Duration (minutes)'] != '':
-                    try:
-                        duration = float(row['Duration (minutes)'])
-                    except:
-                        pass
-                reason = str(row['Reason']) if pd.notna(row['Reason']) and row['Reason'] != '' else None
+                    # Get other fields
+                    action = str(row['Action']).upper()
+                    duration = None
+                    if pd.notna(row['Duration (minutes)']) and row['Duration (minutes)'] != '':
+                        try:
+                            duration = float(row['Duration (minutes)'])
+                        except:
+                            pass
+                    reason = str(row['Reason']) if pd.notna(row['Reason']) and row['Reason'] != '' else None
 
-                # Insert
-                conn.execute("""
-                    INSERT INTO break_logs (user_id, break_type_id, action, timestamp, log_date, duration_minutes, reason)
-                    VALUES (?, ?, ?, ?, ?, ?, ?)
-                """, (user_id, bt_id, action, ts, date_str, duration, reason))
-                new_records += 1
+                    # Insert (use INSERT OR IGNORE to skip duplicates)
+                    conn.execute("""
+                        INSERT OR IGNORE INTO break_logs (user_id, break_type_id, action, timestamp, log_date, duration_minutes, reason)
+                        VALUES (?, ?, ?, ?, ?, ?, ?)
+                    """, (user_id, bt_id, action, ts, date_str, duration, reason))
+                    new_records += 1
+
+                except Exception as row_error:
+                    skipped_records += 1
+                    print(f"[Sync] Skipped row {idx}: {row_error}")
+                    continue  # Continue with next row instead of failing entire sync
+
+        if skipped_records > 0:
+            print(f"[Sync] Warning: {skipped_records} rows skipped due to errors")
 
         return new_records
 
@@ -120,8 +153,8 @@ def detect_active_breaks_from_excel():
         return 0
 
     try:
-        df = pd.read_excel(excel_file, engine='openpyxl')
-        if df.empty:
+        df = safe_read_excel(excel_file)
+        if df is None or df.empty:
             return 0
 
         # Group by User ID and find active sessions
@@ -176,15 +209,28 @@ def detect_active_breaks_from_excel():
                     VALUES (?, ?, ?, ?)
                 """, (db_user_id, bt_id, session['timestamp'], session['reason']))
 
-            # Only delete sessions that are:
-            # 1. Not from recent bot activity
-            # 2. Not in Excel active users
-            # 3. Older than 4 hours (truly stale)
-            conn.execute("""
-                DELETE FROM active_sessions
-                WHERE user_id NOT IN (SELECT user_id FROM active_sessions WHERE created_at > datetime('now', '-5 minutes'))
-                AND start_time < datetime('now', '-4 hours')
-            """)
+            # Only delete truly stale sessions:
+            # - Older than 4 hours (user forgot to clock back)
+            # - NOT in Excel active users (user has already clocked back)
+            # - NOT created by bot recently (preserve bot sessions)
+            stale_threshold = (get_ph_now() - timedelta(hours=4)).strftime('%Y-%m-%d %H:%M:%S')
+
+            # Build list of user_ids to keep (from Excel + recent bot sessions)
+            keep_user_ids = excel_user_ids | recent_bot_sessions
+
+            if keep_user_ids:
+                placeholders = ','.join(['?' for _ in keep_user_ids])
+                conn.execute(f"""
+                    DELETE FROM active_sessions
+                    WHERE user_id NOT IN ({placeholders})
+                    AND start_time < ?
+                """, (*keep_user_ids, stale_threshold))
+            else:
+                # No active users - only delete very old stale sessions
+                conn.execute("""
+                    DELETE FROM active_sessions
+                    WHERE start_time < ?
+                """, (stale_threshold,))
 
         return len(active_users)
 
