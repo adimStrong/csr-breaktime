@@ -152,15 +152,17 @@ def log_break_activity(user_id, username, full_name, break_type, action, timesta
         except Exception as e:
             print(f"[DB Sync Error] {e}")
 
-    # Schedule Excel Online sync (non-blocking)
+    # Schedule Excel Online sync (non-blocking, fire-and-forget)
     if EXCEL_SYNC_AVAILABLE:
         try:
-            loop = asyncio.get_event_loop()
-            if loop.is_running():
-                asyncio.create_task(sync_break_to_excel(
-                    user_id, username, full_name, break_type,
-                    action, timestamp, duration, reason
-                ))
+            loop = asyncio.get_running_loop()
+            loop.create_task(sync_break_to_excel(
+                user_id, username, full_name, break_type,
+                action, timestamp, duration, reason
+            ))
+        except RuntimeError:
+            # No running event loop - skip Excel sync
+            pass
         except Exception as e:
             print(f"[Excel Online Sync Error] {e}")
 
@@ -860,13 +862,10 @@ def main():
 
     init_database_structure()
 
-    # Initialize Excel Online sync
+    # Note: Excel Online sync will be initialized when first used (lazy init)
+    # This avoids event loop conflicts with the Telegram bot
     if EXCEL_SYNC_AVAILABLE:
-        import asyncio
-        try:
-            asyncio.get_event_loop().run_until_complete(init_excel_sync())
-        except Exception as e:
-            print(f"⚠️ Excel sync init skipped: {e}")
+        print("ℹ️ Excel Online sync module loaded (will init on first use)")
 
     application = Application.builder().token(BOT_TOKEN).build()
 
