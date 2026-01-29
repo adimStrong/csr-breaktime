@@ -14,6 +14,7 @@ from telegram.ext import Application, CommandHandler, CallbackQueryHandler, Mess
 # Import database sync functions for real-time dashboard
 try:
     from bot_db_integration import sync_break_out, sync_break_back
+    from database.db import get_active_session, get_or_create_user, get_all_active_sessions, get_user_by_telegram_id
     DB_SYNC_ENABLED = True
     print("✅ Database sync enabled for real-time dashboard")
 except ImportError:
@@ -55,6 +56,99 @@ user_sessions = {}
 
 # Store users waiting to provide reasons
 waiting_for_reason_users = {}
+
+# Break type display name mapping (reverse lookup)
+BREAK_TYPE_DISPLAY = {
+    'B': '☕ Break',
+    'W': '🚻 WC',
+    'P': '🚽 WCP',
+    'O': '⚠️ Other'
+}
+
+
+def get_active_session_from_db(telegram_id: int) -> dict:
+    """
+    Get active session from database and convert to in-memory format.
+    This ensures sessions persist across bot restarts.
+    """
+    if not DB_SYNC_ENABLED:
+        return None
+
+    try:
+        # Get user ID from telegram ID
+        user = get_user_by_telegram_id(telegram_id)
+        if not user:
+            return None
+
+        session = get_active_session(user['id'])
+        if not session:
+            return None
+
+        # Convert DB format to in-memory format
+        break_type_code = session.get('break_type_code', 'O')
+        break_type_display = BREAK_TYPE_DISPLAY.get(break_type_code, '⚠️ Other')
+
+        return {
+            'break_type': break_type_display,
+            'start_time': str(session['start_time']).split('.')[0],  # Remove microseconds
+            'active': True,
+            'reason': session.get('reason'),
+            'group_chat_id': session.get('group_chat_id')
+        }
+    except Exception as e:
+        print(f"[DB] Error getting active session: {e}")
+        return None
+
+
+def load_active_sessions_from_db():
+    """
+    Load all active sessions from database into memory on startup.
+    This restores state after bot restarts.
+    """
+    if not DB_SYNC_ENABLED:
+        return
+
+    try:
+        sessions = get_all_active_sessions()
+        loaded_count = 0
+
+        for session in sessions:
+            telegram_id = session['telegram_id']
+            break_type_code = session.get('break_type_name', 'Other')
+
+            # Find the display name based on break_type_name
+            break_type_display = break_type_code
+            for code, display in BREAK_TYPE_DISPLAY.items():
+                if code in str(session.get('break_type_id', '')):
+                    break_type_display = display
+                    break
+
+            # Use break_type_name directly if available
+            if 'break_type_name' in session:
+                name = session['break_type_name']
+                if 'Break' in name:
+                    break_type_display = '☕ Break'
+                elif 'WCP' in name:
+                    break_type_display = '🚽 WCP'
+                elif 'WC' in name:
+                    break_type_display = '🚻 WC'
+                elif 'Other' in name:
+                    break_type_display = '⚠️ Other'
+
+            user_sessions[telegram_id] = {
+                'break_type': break_type_display,
+                'start_time': str(session['start_time']).split('.')[0],
+                'active': True,
+                'reason': session.get('reason'),
+                'full_name': session.get('full_name', 'Unknown'),
+                'group_chat_id': session.get('group_chat_id')
+            }
+            loaded_count += 1
+
+        if loaded_count > 0:
+            print(f"✅ Loaded {loaded_count} active sessions from database")
+    except Exception as e:
+        print(f"[DB] Error loading active sessions: {e}")
 
 
 def get_ph_time():
@@ -240,7 +334,15 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action_type = action_code[1]
     break_type = break_types.get(break_type_code, 'Unknown')
 
+    # Check in-memory first, then fallback to database
     active_session = user_sessions.get(user_id)
+    if not active_session or not active_session.get('active'):
+        # Try to get from database (handles bot restarts)
+        db_session = get_active_session_from_db(user_id)
+        if db_session:
+            user_sessions[user_id] = db_session  # Sync to memory
+            active_session = db_session
+
     is_active = active_session and active_session.get('active')
 
     # Handle "OUT" actions (B1, W1, P1, O1)
@@ -504,7 +606,15 @@ async def handle_break_command(update: Update, context: ContextTypes.DEFAULT_TYP
     action_type = command[1]
     break_type = break_types.get(break_type_code, 'Unknown')
 
+    # Check in-memory first, then fallback to database
     active_session = user_sessions.get(user_id)
+    if not active_session or not active_session.get('active'):
+        # Try to get from database (handles bot restarts)
+        db_session = get_active_session_from_db(user_id)
+        if db_session:
+            user_sessions[user_id] = db_session  # Sync to memory
+            active_session = db_session
+
     is_active = active_session and active_session.get('active')
 
     # Handle OUT actions
@@ -861,6 +971,9 @@ def main():
     print("="*60)
 
     init_database_structure()
+
+    # Load active sessions from database (restores state after restart)
+    load_active_sessions_from_db()
 
     # Note: Excel Online sync will be initialized when first used (lazy init)
     # This avoids event loop conflicts with the Telegram bot
