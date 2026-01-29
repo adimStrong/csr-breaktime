@@ -249,7 +249,7 @@ def detect_active_breaks_from_excel():
 
 
 def sync_all():
-    """Sync all Excel files to database and detect active breaks."""
+    """Sync all Excel files to database. Active breaks managed by bot only."""
     print(f"[{get_ph_now()}] Starting sync from {EXCEL_SOURCE_DIR}...")
 
     # Find today's and yesterday's Excel files
@@ -278,9 +278,11 @@ def sync_all():
                 print(f"  Synced {new} new records from {excel_file.name}")
             total_new += new
 
-    # Detect active breaks from today's Excel
-    active_count = detect_active_breaks_from_excel()
-    print(f"  Active breaks detected: {active_count}")
+    # NOTE: Active breaks detection from Excel DISABLED
+    # Bot handles active_sessions directly via bot_db_integration.py
+    # Excel sync was causing stale sessions to reappear after users clocked back
+    # active_count = detect_active_breaks_from_excel()
+    # print(f"  Active breaks detected: {active_count}")
 
     print(f"[{get_ph_now()}] Sync complete. {total_new} new records.")
     return total_new
