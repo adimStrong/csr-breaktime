@@ -157,7 +157,7 @@ def initial_full_sync():
 
 if __name__ == "__main__":
     print(f"[{get_timestamp()}] " + "=" * 50)
-    print(f"[{get_timestamp()}] CSR Breaktime - Startup")
+    print(f"[{get_timestamp()}] CSR Breaktime - Startup v2")
     print(f"[{get_timestamp()}] " + "=" * 50)
 
     mode = os.getenv("RUN_MODE", "both").lower()
