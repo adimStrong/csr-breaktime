@@ -65,6 +65,9 @@ user_sessions = {}
 # Store users waiting to provide reasons
 waiting_for_reason_users = {}
 
+# Store last action timestamps to prevent duplicates
+last_action_timestamps = {}
+
 # Break type display name mapping (reverse lookup)
 BREAK_TYPE_DISPLAY = {
     'B': '☕ Break',
@@ -105,6 +108,36 @@ def get_active_session_from_db(telegram_id: int) -> dict:
         }
     except Exception as e:
         print(f"[DB] Error getting active session: {e}")
+        return None
+
+
+def get_active_session_from_excel(user_id: int) -> dict:
+    """Fallback: recover session from Excel if DB not available."""
+    try:
+        log_file = get_daily_log_file()
+        if not os.path.exists(log_file):
+            return None
+
+        df = pd.read_excel(log_file, engine='openpyxl')
+        if df.empty:
+            return None
+
+        user_df = df[df['User ID'] == user_id]
+        if user_df.empty:
+            return None
+
+        last_row = user_df.iloc[-1]
+        if last_row['Action'] == 'OUT':
+            return {
+                'break_type': last_row['Break Type'],
+                'start_time': str(last_row['Timestamp']),
+                'active': True,
+                'full_name': last_row['Full Name'],
+                'reason': last_row['Reason'] if pd.notna(last_row.get('Reason')) else None,
+            }
+        return None
+    except Exception as e:
+        print(f"[Excel Recovery] Error: {e}")
         return None
 
 
@@ -231,6 +264,20 @@ async def log_break_activity_async(user_id, username, full_name, break_type, act
 
 def log_break_activity(user_id, username, full_name, break_type, action, timestamp, duration=None, reason=None, group_chat_id=None):
     """Log break activity to daily Excel file AND SQLite database for real-time dashboard"""
+    global last_action_timestamps
+
+    # Deduplication: Skip if same action within 5 seconds
+    action_key = f"{user_id}_{action}_{break_type}"
+    current_time = get_ph_time()
+
+    if action_key in last_action_timestamps:
+        time_diff = (current_time - last_action_timestamps[action_key]).total_seconds()
+        if time_diff < 5:
+            print(f"[DUPLICATE] Skipped {action} for user {user_id} (within {time_diff:.1f}s)")
+            return True
+
+    last_action_timestamps[action_key] = current_time
+
     # Log to local Excel file (original behavior)
     log_file = get_daily_log_file()
 
@@ -342,11 +389,14 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
     action_type = action_code[1]
     break_type = break_types.get(break_type_code, 'Unknown')
 
-    # Check in-memory first, then fallback to database
+    # Check in-memory first, then fallback to database, then Excel
     active_session = user_sessions.get(user_id)
     if not active_session or not active_session.get('active'):
         # Try to get from database (handles bot restarts)
         db_session = get_active_session_from_db(user_id)
+        if not db_session:
+            # Fallback to Excel recovery
+            db_session = get_active_session_from_excel(user_id)
         if db_session:
             user_sessions[user_id] = db_session  # Sync to memory
             active_session = db_session
@@ -614,11 +664,14 @@ async def handle_break_command(update: Update, context: ContextTypes.DEFAULT_TYP
     action_type = command[1]
     break_type = break_types.get(break_type_code, 'Unknown')
 
-    # Check in-memory first, then fallback to database
+    # Check in-memory first, then fallback to database, then Excel
     active_session = user_sessions.get(user_id)
     if not active_session or not active_session.get('active'):
         # Try to get from database (handles bot restarts)
         db_session = get_active_session_from_db(user_id)
+        if not db_session:
+            # Fallback to Excel recovery
+            db_session = get_active_session_from_excel(user_id)
         if db_session:
             user_sessions[user_id] = db_session  # Sync to memory
             active_session = db_session
@@ -710,7 +763,7 @@ async def cancel(update: Update, context: ContextTypes.DEFAULT_TYPE) -> int:
 
 def check_and_clear_cache_signal():
     """Check for cache clear signal from API and clear user_sessions if needed."""
-    global user_sessions
+    global user_sessions, last_action_timestamps
     signal_file = os.path.join(DATABASE_DIR, ".clear_cache_signal")
 
     if os.path.exists(signal_file):
@@ -720,10 +773,12 @@ def check_and_clear_cache_signal():
                 signal_time = f.read().strip()
             # Delete signal file
             os.remove(signal_file)
-            # Clear all user sessions
+            # Clear all user sessions and deduplication timestamps
+            session_count = len(user_sessions)
             user_sessions.clear()
+            last_action_timestamps.clear()
             print(f"🔄 Cache cleared by system signal at {signal_time}")
-            print(f"   All {len(user_sessions)} user sessions cleared")
+            print(f"   Cleared {session_count} user sessions and dedup timestamps")
         except Exception as e:
             print(f"⚠️ Error processing cache clear signal: {e}")
 
