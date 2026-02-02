@@ -382,7 +382,8 @@ async def button_callback(update: Update, context: ContextTypes.DEFAULT_TYPE):
         'B': '☕ Break',
         'W': '🚻 WC',
         'P': '🚽 WCP',
-        'O': '⚠️ Other'
+        'O': '⚠️ Other',
+        'G': '🍽️ Get Food'
     }
 
     break_type_code = action_code[0]
@@ -654,10 +655,11 @@ async def handle_break_command(update: Update, context: ContextTypes.DEFAULT_TYP
         'B': '☕ Break',
         'W': '🚻 WC',
         'P': '🚽 WCP',
-        'O': '⚠️ Other'
+        'O': '⚠️ Other',
+        'G': '🍽️ Get Food'
     }
 
-    if command not in ['B1', 'B2', 'W1', 'W2', 'P1', 'P2', 'O1', 'O2']:
+    if command not in ['B1', 'B2', 'W1', 'W2', 'P1', 'P2', 'O1', 'O2', 'G1', 'G2']:
         return
 
     break_type_code = command[0]
@@ -798,7 +800,8 @@ async def check_break_reminders(context: ContextTypes.DEFAULT_TYPE):
             reminder_config = {
                 '☕ Break': 30,
                 '🚻 WC': 5,
-                '🚽 WCP': 10
+                '🚽 WCP': 10,
+                '🍽️ Get Food': 10
             }
 
             if break_type in reminder_config:
@@ -821,7 +824,7 @@ async def check_break_reminders(context: ContextTypes.DEFAULT_TYPE):
 🚨 OVER LIMIT by {over_minutes} mins!
 
 Time limit: {threshold_minutes} mins
-Please clock back now using /b2, /w2, or /p2"""
+Please clock back now using /b2, /w2, /p2, or /g2"""
 
                     try:
                         await context.bot.send_message(
@@ -1099,6 +1102,8 @@ def main():
     application.add_handler(CommandHandler("p2", handle_break_command))
     application.add_handler(CommandHandler("o1", handle_break_command))
     application.add_handler(CommandHandler("o2", handle_break_command))
+    application.add_handler(CommandHandler("g1", handle_break_command))
+    application.add_handler(CommandHandler("g2", handle_break_command))
 
     print("\n🚀 Bot is now running...")
     print("📂 Database location:", DATABASE_DIR)
