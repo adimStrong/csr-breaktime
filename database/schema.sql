@@ -40,7 +40,8 @@ INSERT OR IGNORE INTO break_types (code, name, display_name, time_limit_minutes,
     ('B', 'Break', '☕ Break', 30, 0, 1),
     ('W', 'WC', '🚻 WC', 5, 0, 0),
     ('P', 'WCP', '🚽 WCP', 10, 0, 1),
-    ('O', 'Other', '⚠️ Other', NULL, 1, 1);
+    ('O', 'Other', '⚠️ Other', NULL, 1, 1),
+    ('G', 'Get Food', '🍽️ Get Food', 10, 0, 1);
 
 -- Break logs: Main activity log (replaces Excel)
 CREATE TABLE IF NOT EXISTS break_logs (

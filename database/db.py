@@ -143,6 +143,18 @@ def init_database():
         except Exception as e:
             print(f"Break logs migration: {e}")
 
+        # Add 'G' (Get Food) break type if it doesn't exist (migration)
+        try:
+            cursor = conn.execute("SELECT id FROM break_types WHERE code = 'G'")
+            if not cursor.fetchone():
+                conn.execute("""
+                    INSERT INTO break_types (code, name, display_name, time_limit_minutes, requires_reason, is_counted_in_total)
+                    VALUES ('G', 'Get Food', '🍽️ Get Food', 10, 0, 1)
+                """)
+                print("Added 'Get Food' break type")
+        except Exception as e:
+            print(f"Get Food break type migration: {e}")
+
         print(f"Database initialized: {DB_FILE}")
 
     return True
