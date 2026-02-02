@@ -1079,6 +1079,29 @@ def main():
 
     application = Application.builder().token(BOT_TOKEN).build()
 
+    # Set bot commands for the "/" menu in Telegram
+    async def set_commands(app):
+        from telegram import BotCommand
+        commands = [
+            BotCommand("menu", "Show break menu"),
+            BotCommand("b1", "☕ Break Out"),
+            BotCommand("b2", "☕ Break Back"),
+            BotCommand("w1", "🚻 WC Out"),
+            BotCommand("w2", "🚻 WC Back"),
+            BotCommand("p1", "🚽 WCP Out"),
+            BotCommand("p2", "🚽 WCP Back"),
+            BotCommand("o1", "⚠️ Other Out"),
+            BotCommand("o2", "⚠️ Other Back"),
+            BotCommand("g1", "🍽️ Get Food Out"),
+            BotCommand("g2", "🍽️ Get Food Back"),
+            BotCommand("summary", "📊 My Break Summary"),
+            BotCommand("status", "📋 Active Breaks"),
+        ]
+        await app.bot.set_my_commands(commands)
+        print("✅ Bot commands menu updated")
+
+    application.post_init = set_commands
+
     job_queue = application.job_queue
     job_queue.run_repeating(check_break_reminders, interval=60, first=0)
     print("✅ Break reminder system activated (checks every 60 seconds)")
