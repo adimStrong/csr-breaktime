@@ -600,6 +600,10 @@ async def menu(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("✅ Other Back (O2)", callback_data='O2')
         ],
         [
+            InlineKeyboardButton("🍽️ Get Food (G1)", callback_data='G1'),
+            InlineKeyboardButton("✅ Food Back (G2)", callback_data='G2')
+        ],
+        [
             InlineKeyboardButton("📊 My Break Summary", callback_data='summary')
         ]
     ]
@@ -626,6 +630,10 @@ def get_keyboard(user_id):
         [
             InlineKeyboardButton("⚠️ Other Out (O1)", callback_data='O1'),
             InlineKeyboardButton("✅ Other Back (O2)", callback_data='O2')
+        ],
+        [
+            InlineKeyboardButton("🍽️ Get Food (G1)", callback_data='G1'),
+            InlineKeyboardButton("✅ Food Back (G2)", callback_data='G2')
         ],
         [
             InlineKeyboardButton("📊 My Break Summary", callback_data='summary')
