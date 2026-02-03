@@ -551,18 +551,27 @@ def get_peak_hours(days: int = 7, top_n: int = 5) -> List[Dict]:
 # ============================================
 
 def get_compliance_trend(days: int = 7) -> List[ComplianceTrend]:
-    """Get compliance trend over the last N days."""
+    """Get compliance trend over the last N days - calculated from break_logs."""
     with get_connection() as conn:
+        # Calculate directly from break_logs for accurate real-time data
         cursor = conn.execute("""
             SELECT
-                summary_date,
-                SUM(breaks_within_limit) as within_limit,
-                SUM(breaks_over_limit) as over_limit,
-                COUNT(DISTINCT user_id) as agents_count
-            FROM daily_summaries
-            WHERE summary_date >= DATE('now', ? || ' days')
-            GROUP BY summary_date
-            ORDER BY summary_date
+                bl.log_date,
+                COUNT(CASE
+                    WHEN bt.time_limit_minutes IS NULL THEN 1
+                    WHEN bl.duration_minutes <= bt.time_limit_minutes THEN 1
+                END) as within_limit,
+                COUNT(CASE
+                    WHEN bt.time_limit_minutes IS NOT NULL
+                    AND bl.duration_minutes > bt.time_limit_minutes THEN 1
+                END) as over_limit,
+                COUNT(DISTINCT bl.user_id) as agents_count
+            FROM break_logs bl
+            JOIN break_types bt ON bl.break_type_id = bt.id
+            WHERE bl.action = 'BACK'
+            AND bl.log_date >= DATE('now', ? || ' days')
+            GROUP BY bl.log_date
+            ORDER BY bl.log_date
         """, (f'-{days}',))
 
         results = []
@@ -573,7 +582,7 @@ def get_compliance_trend(days: int = 7) -> List[ComplianceTrend]:
             rate = round(100 * within / total, 1) if total > 0 else 100.0
 
             results.append(ComplianceTrend(
-                date=str(row['summary_date']),
+                date=str(row['log_date']),
                 compliance_rate=rate,
                 total_breaks=total,
                 within_limit=within,
