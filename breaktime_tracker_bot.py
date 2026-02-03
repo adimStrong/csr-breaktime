@@ -338,6 +338,10 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
             InlineKeyboardButton("✅ Other Back (O2)", callback_data='O2')
         ],
         [
+            InlineKeyboardButton("🍽️ Get Food (G1)", callback_data='G1'),
+            InlineKeyboardButton("✅ Food Back (G2)", callback_data='G2')
+        ],
+        [
             InlineKeyboardButton("📊 My Break Summary", callback_data='summary')
         ]
     ]
@@ -351,6 +355,7 @@ async def start(update: Update, context: ContextTypes.DEFAULT_TYPE):
         "☕ **Break** - B1 (Out) / B2 (Back) - 30 mins\n"
         "🚻 **WC** - W1 (Out) / W2 (Back) - 5 mins\n"
         "🚽 **WCP** - P1 (Out) / P2 (Back) - 10 mins\n"
+        "🍽️ **Get Food** - G1 (Out) / G2 (Back) - 10 mins\n"
         "⚠️ **Other** - O1 (Out) / O2 (Back) - Reason required\n\n"
         "Click a button to log your break time!"
     )
